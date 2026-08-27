@@ -1,6 +1,7 @@
 import io
 import re
 from datetime import date, datetime
+from zoneinfo import ZoneInfo  # Fuso horário nativo no Python 3.9+
 import pandas as pd
 import requests
 import streamlit as st
@@ -8,6 +9,16 @@ import streamlit as st
 st.set_page_config(layout="wide", page_title="GESTÃO DE ATENDIMENTOS DO DIA")
 
 URL_APP_SCRIPT = "https://script.google.com/macros/s/AKfycbyB5a77mt3IBHeE23f9dBXHqkNCr6F_y7ZmSYsLaUjW9Y9Tt5twou11VAomrb_r_b9_8w/exec"
+FUSO_BRASILIA = ZoneInfo("America/Sao_Paulo")
+
+
+# HELPER PARA OTER DATA E HORA DE BRASÍLIA
+def obter_agora_brasilia():
+    return datetime.now(FUSO_BRASILIA)
+
+
+def obter_hoje_brasilia():
+    return obter_agora_brasilia().date()
 
 
 # FUNÇÕES DE INTEGRAÇÃO COM O GOOGLE APPS SCRIPT
@@ -27,9 +38,9 @@ def carregar_dados():
                             dt_reg[:10], "%Y-%m-%d"
                         ).date()
                     except ValueError:
-                        dt_obj = date.today()
+                        dt_obj = obter_hoje_brasilia()
                 else:
-                    dt_obj = date.today()
+                    dt_obj = obter_hoje_brasilia()
 
                 pacientes.append({
                     "id": int(row.get("id", 0)),
@@ -124,7 +135,7 @@ def formatar_cpf(texto_cpf):
 
 
 def obter_pacientes_hoje():
-    hoje = date.today()
+    hoje = obter_hoje_brasilia()
     return [
         p for p in st.session_state.pacientes if p.get("data_registro") == hoje
     ]
@@ -143,7 +154,9 @@ def gerar_rotulos_unicos(lista_nomes):
         partes = nome.strip().split()
         primeiro_nome = partes[0]
         if contagem_primeiros_nomes[primeiro_nome] > 1:
-            nome_exibicao = " ".join(partes[:2]) if len(partes) > 1 else primeiro_nome
+            nome_exibicao = (
+                " ".join(partes[:2]) if len(partes) > 1 else primeiro_nome
+            )
         else:
             nome_exibicao = primeiro_nome
         mapeamento[nome] = nome_exibicao.upper()
@@ -188,7 +201,9 @@ with aba_cadastro:
     f_id = st.session_state.form_id
 
     atendimento_selecionado = st.selectbox(
-        "ATENDIMENTO *", options=OPCOES_ATENDIMENTO, key=f"cad_atendimento_{f_id}"
+        "ATENDIMENTO *",
+        options=OPCOES_ATENDIMENTO,
+        key=f"cad_atendimento_{f_id}",
     )
 
     nome_medicacao = ""
@@ -203,7 +218,9 @@ with aba_cadastro:
         coluna1, coluna2 = st.columns(2)
 
         with coluna1:
-            nome_paciente = st.text_input("NOME COMPLETO *", key=f"cad_nome_{f_id}")
+            nome_paciente = st.text_input(
+                "NOME COMPLETO *", key=f"cad_nome_{f_id}"
+            )
             cpf = st.text_input(
                 "CPF", placeholder="000.000.000-00", key=f"cad_cpf_{f_id}"
             )
@@ -213,13 +230,13 @@ with aba_cadastro:
                 "DATA DE NASCIMENTO",
                 value=None,
                 min_value=date(1900, 1, 1),
-                max_value=date.today(),
+                max_value=obter_hoje_brasilia(),
                 format="DD/MM/YYYY",
                 key=f"cad_dt_nasc_{f_id}",
             )
             horario_chegada = st.time_input(
                 "HORÁRIO DE CHEGADA",
-                value=datetime.now().time(),
+                value=obter_agora_brasilia().time(),
                 key=f"cad_horario_{f_id}",
             )
 
@@ -232,7 +249,8 @@ with aba_cadastro:
                 st.error("O CAMPO 'NOME COMPLETO' É OBRIGATÓRIO.")
             elif not cpf.strip() and data_nascimento is None:
                 st.error(
-                    "É OBRIGATÓRIO PREENCHER PELO MENOS O CPF OU A DATA DE NASCIMENTO."
+                    "É OBRIGATÓRIO PREENCHER PELO MENOS O CPF OU A DATA DE"
+                    " NASCIMENTO."
                 )
             elif cpf.strip() and len(numeros_cpf) != 11:
                 st.error("O CPF DEVE CONTER EXATAMENTE 11 NÚMEROS.")
@@ -259,9 +277,11 @@ with aba_cadastro:
                 )
 
                 novo_registro = {
-                    "id": max([p["id"] for p in st.session_state.pacientes], default=0)
+                    "id": max(
+                        [p["id"] for p in st.session_state.pacientes], default=0
+                    )
                     + 1,
-                    "data_registro": date.today(),
+                    "data_registro": obter_hoje_brasilia(),
                     "Horário de Chegada": horario_chegada.strftime("%H:%M"),
                     "Nome": nome_paciente.strip().upper(),
                     "CPF": cpf_formatado,
@@ -283,7 +303,7 @@ with aba_cadastro:
 
     st.divider()
 
-    st.subheader("✏️ PACIENTES DO DIA ")
+    st.subheader("✏️ PACIENTES DO DIA")
     pacientes_hoje = obter_pacientes_hoje()
 
     if not pacientes_hoje:
@@ -612,7 +632,7 @@ with aba_historico:
             data=csv_buffer.getvalue(),
             file_name=(
                 "HISTORICO_ATENDIMENTOS_"
-                f"{date.today().strftime('%d_%m_%Y')}.csv"
+                f"{obter_hoje_brasilia().strftime('%d_%m_%Y')}.csv"
             ),
             mime="text/csv",
         )
