@@ -6,7 +6,7 @@ import pandas as pd
 import requests
 import streamlit as st
 
-st.set_page_config(layout="wide", page_title="GESTÃO DE ATENDIMENTOS DO DIA")
+st.set_page_config(layout="wide", page_title="OBSERVAÇÃO")
 
 URL_APP_SCRIPT = "https://script.google.com/macros/s/AKfycbyB5a77mt3IBHeE23f9dBXHqkNCr6F_y7ZmSYsLaUjW9Y9Tt5twou11VAomrb_r_b9_8w/exec"
 FUSO_BRASILIA = ZoneInfo("America/Sao_Paulo")
@@ -112,17 +112,22 @@ if "form_id" not in st.session_state:
 PROFISSIONAIS_LISTA = [
     "ALYSSON",
     "A.CRISTINA DIAS",
+    "ALESSANDRA",
     "CRISTINA",
     "DEBORA BITENCORTE",
     "DEBORA CRISTIANE",
     "DIOLINA",
-    "ERIKA=",
+    "ELAINE",
+    "ERIKA",
     "GIZELE",
     "GLEICE",
+    "ILKA",
     "JOSIANE",
     "KAROLINY",
     "MARCOS",
-    "MARIA JOSE PEREIRA DA COSTA",
+    "MARIA JOSE",
+    "MARIA NAVARRO",
+    "MELISSA",
     "MICHELLE",
 ]
 
@@ -166,13 +171,17 @@ def gerar_rotulos_unicos(lista_nomes):
 
 OPCOES_ATENDIMENTO = [
     "SELECIONE...",
-    "MEDICAÇÃO",
     "AFERIR PRESSÃO",
-    "TESTE DE IST",
-    "TESTE DE GRAVIDEZ",
-    "TESTE DE COVID",
     "CURATIVO",
+    "ECG DE URGÊNCIA",
+    "ESCARRO TB",
+    "GLICEMIA",
+    "MEDICAÇÃO",
+    "PROVA DO LAÇO",
     "RETIRADA DE PONTOS",
+    "TESTE DE COVID",
+    "TESTE DE GRAVIDEZ",
+    "TESTE DE IST",
 ]
 
 MAPA_PROFISSIONAIS = gerar_rotulos_unicos(PROFISSIONAIS_LISTA)
@@ -210,7 +219,7 @@ with aba_cadastro:
     if atendimento_selecionado.upper() == "MEDICAÇÃO":
         nome_medicacao = st.text_input(
             "QUAL A MEDICAÇÃO? *",
-            placeholder="DIGITE O NOME E DOSAGEM (EX: DIPIRONA 500MG)",
+            placeholder="DIGITE O NOME DA MEDICAÇÃO",
             key=f"cad_medicacao_{f_id}",
         )
 
@@ -542,6 +551,7 @@ with aba_equipe:
 
 
 # ABA 3: HISTÓRICO GERAL (OUTRAS DATAS E BUSCA)
+
 with aba_historico:
     st.header("📂 HISTÓRICO GERAL DE ATENDIMENTOS")
 
