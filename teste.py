@@ -189,7 +189,7 @@ OPCOES_PROFISSIONAIS_EXIBICAO = ["SELECIONE..."] + [
     MAPA_PROFISSIONAIS[p] for p in PROFISSIONAIS_LISTA
 ]
 
-st.title("📋 ATENDIMENTOS SALA DE OBSERVAÇÃO")
+st.title(" 🩺 ATENDIMENTOS SALA DE OBSERVAÇÃO")
 
 if st.button("🔄 RECARREGAR DADOS DA PLANILHA"):
     st.session_state.pacientes = carregar_dados()
@@ -199,7 +199,7 @@ if st.button("🔄 RECARREGAR DADOS DA PLANILHA"):
 aba_cadastro, aba_equipe, aba_historico = st.tabs([
     "➕ CADASTRO DE PACIENTES",
     "👨‍⚕️ REGISTRO DO PROFISSIONAL & OBSERVAÇÕES",
-    "📂 HISTÓRICO",
+    "📋 HISTÓRICO",
 ])
 
 
