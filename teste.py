@@ -5,14 +5,13 @@ from zoneinfo import ZoneInfo  # Fuso horário nativo no Python 3.9+
 import pandas as pd
 import requests
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(layout="wide", page_title="OBSERVAÇÃO")
 
-# Dispara uma nova execução do script a cada 60 segundos, mesmo sem
-# nenhuma interação do usuário, para que a atualização automática abaixo
-# tenha a chance de rodar periodicamente.
-st_autorefresh(interval=60 * 1000, key="autorefresh_planilha")
+st.markdown(
+    '<meta http-equiv="refresh" content="60">',
+    unsafe_allow_html=True,
+)
 
 URL_APP_SCRIPT = "https://script.google.com/macros/s/AKfycbyB5a77mt3IBHeE23f9dBXHqkNCr6F_y7ZmSYsLaUjW9Y9Tt5twou11VAomrb_r_b9_8w/exec"
 FUSO_BRASILIA = ZoneInfo("America/Sao_Paulo")
@@ -163,9 +162,10 @@ if "ultima_atualizacao_automatica" not in st.session_state:
     st.session_state.ultima_atualizacao_automatica = obter_agora_brasilia()
 
 # ATUALIZAÇÃO AUTOMÁTICA A CADA MINUTO
-# A cada execução do script (seja por autorefresh ou por qualquer clique do
-# usuário), verifica se já se passou 1 minuto desde a última busca na
-# planilha; se sim, recarrega os dados em segundo plano.
+# Reforço de segurança: a cada execução do script (seja pelo refresh
+# automático da página acima ou por qualquer clique do usuário), verifica
+# se já se passou 1 minuto desde a última busca na planilha; se sim,
+# recarrega os dados.
 _agora = obter_agora_brasilia()
 if (_agora - st.session_state.ultima_atualizacao_automatica).total_seconds() >= 60:
     st.session_state.pacientes = carregar_dados()
