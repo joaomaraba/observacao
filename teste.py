@@ -5,8 +5,14 @@ from zoneinfo import ZoneInfo  # Fuso horário nativo no Python 3.9+
 import pandas as pd
 import requests
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(layout="wide", page_title="OBSERVAÇÃO")
+
+# Dispara uma nova execução do script a cada 60 segundos, mesmo sem
+# nenhuma interação do usuário, para que a atualização automática abaixo
+# tenha a chance de rodar periodicamente.
+st_autorefresh(interval=60 * 1000, key="autorefresh_planilha")
 
 URL_APP_SCRIPT = "https://script.google.com/macros/s/AKfycbyB5a77mt3IBHeE23f9dBXHqkNCr6F_y7ZmSYsLaUjW9Y9Tt5twou11VAomrb_r_b9_8w/exec"
 FUSO_BRASILIA = ZoneInfo("America/Sao_Paulo")
@@ -96,7 +102,51 @@ def salvar_todos_dados(lista_pacientes):
         return False
 
 
+def salvar_varios_com_mesclagem(lista_pacientes_para_salvar):
+    """
+    NUNCA sobrescreve a planilha só com o que está em memória nesta aba/sessão.
+    Antes de salvar, busca a versão mais recente da planilha (que pode ter
+    registros criados/alterados em outra aba, outro profissional, etc.),
+    mescla por 'id' os itens informados (atualiza se já existir, adiciona se
+    for novo) e só então grava a lista completa de volta.
+
+    Assim nenhum registro existente na planilha é apagado por engano.
+    """
+    dados_atuais = carregar_dados()
+    if not dados_atuais:
+        # Se a leitura falhar, usa o que já está na sessão como base
+        # em vez de arriscar mandar uma lista vazia/incompleta.
+        dados_atuais = list(st.session_state.pacientes)
+
+    mapa_atual = {p["id"]: p for p in dados_atuais}
+
+    for paciente in lista_pacientes_para_salvar:
+        mapa_atual[paciente["id"]] = paciente
+
+    lista_final = list(mapa_atual.values())
+
+    sucesso = salvar_todos_dados(lista_final)
+    if sucesso:
+        st.session_state.pacientes = lista_final
+    return sucesso
+
+
+def salvar_com_mesclagem(paciente_para_salvar):
+    """Atalho para mesclar e salvar um único paciente."""
+    return salvar_varios_com_mesclagem([paciente_para_salvar])
+
+
+def obter_proximo_id():
+    """Consulta a planilha em tempo real para gerar um ID livre de conflitos,
+    já que outra pessoa pode ter cadastrado um paciente entre um carregamento
+    e outro."""
+    dados_atuais = carregar_dados()
+    base = dados_atuais if dados_atuais else st.session_state.pacientes
+    return max([p["id"] for p in base], default=0) + 1
+
+
 # INICIALIZAÇÃO DE ESTADOS
+# Recarrega os dados da planilha sempre que o app é aberto/entra em uma nova sessão.
 if "pacientes" not in st.session_state:
     st.session_state.pacientes = carregar_dados()
 
@@ -108,6 +158,18 @@ if "modo_edicao_concluido" not in st.session_state:
 
 if "form_id" not in st.session_state:
     st.session_state.form_id = 0
+
+if "ultima_atualizacao_automatica" not in st.session_state:
+    st.session_state.ultima_atualizacao_automatica = obter_agora_brasilia()
+
+# ATUALIZAÇÃO AUTOMÁTICA A CADA MINUTO
+# A cada execução do script (seja por autorefresh ou por qualquer clique do
+# usuário), verifica se já se passou 1 minuto desde a última busca na
+# planilha; se sim, recarrega os dados em segundo plano.
+_agora = obter_agora_brasilia()
+if (_agora - st.session_state.ultima_atualizacao_automatica).total_seconds() >= 60:
+    st.session_state.pacientes = carregar_dados()
+    st.session_state.ultima_atualizacao_automatica = _agora
 
 PROFISSIONAIS_LISTA = [
     "ALYSSON",
@@ -190,6 +252,10 @@ OPCOES_PROFISSIONAIS_EXIBICAO = ["SELECIONE..."] + [
 ]
 
 st.title(" 🩺 ATENDIMENTOS SALA DE OBSERVAÇÃO")
+st.caption(
+    "🔄 ATUALIZAÇÃO AUTOMÁTICA A CADA 1 MINUTO — ÚLTIMA ATUALIZAÇÃO ÀS "
+    f"{st.session_state.ultima_atualizacao_automatica.strftime('%H:%M:%S')}"
+)
 
 if st.button("🔄 RECARREGAR DADOS DA PLANILHA"):
     st.session_state.pacientes = carregar_dados()
@@ -286,10 +352,7 @@ with aba_cadastro:
                 )
 
                 novo_registro = {
-                    "id": max(
-                        [p["id"] for p in st.session_state.pacientes], default=0
-                    )
-                    + 1,
+                    "id": obter_proximo_id(),
                     "data_registro": obter_hoje_brasilia(),
                     "Horário de Chegada": horario_chegada.strftime("%H:%M"),
                     "Nome": nome_paciente.strip().upper(),
@@ -300,9 +363,11 @@ with aba_cadastro:
                     "Observações": "",
                     "Status": "AGUARDANDO",
                 }
-                st.session_state.pacientes.append(novo_registro)
 
-                if salvar_todos_dados(st.session_state.pacientes):
+                # Mescla com a versão mais recente da planilha em vez de
+                # sobrescrevê-la só com a lista desta sessão — assim nenhum
+                # paciente cadastrado por outra pessoa é perdido.
+                if salvar_com_mesclagem(novo_registro):
                     st.session_state.form_id += 1
                     st.success(
                         f"PACIENTE '{nome_paciente.strip().upper()}' CADASTRADO E"
@@ -352,22 +417,32 @@ with aba_cadastro:
         )
 
         if st.button("💾 SALVAR ALTERAÇÕES DA TABELA NA PLANILHA"):
-            for row in df_editado.to_dict(orient="records"):
-                for paciente_orig in st.session_state.pacientes:
-                    if paciente_orig["id"] == row["id"]:
-                        paciente_orig["Horário de Chegada"] = str(
-                            row["Horário de Chegada"]
-                        ).upper()
-                        paciente_orig["Nome"] = str(row["Nome"]).upper()
-                        paciente_orig["CPF"] = str(row["CPF"]).upper()
-                        paciente_orig["Data de Nascimento"] = str(
-                            row["Data de Nascimento"]
-                        ).upper()
-                        paciente_orig["Atendimento"] = str(
-                            row["Atendimento"]
-                        ).upper()
+            mapa_pacientes_sessao = {
+                p["id"]: p for p in st.session_state.pacientes
+            }
+            pacientes_atualizados = []
 
-            if salvar_todos_dados(st.session_state.pacientes):
+            for row in df_editado.to_dict(orient="records"):
+                paciente_orig = mapa_pacientes_sessao.get(row["id"])
+                if paciente_orig is None:
+                    continue
+                paciente_atualizado = paciente_orig.copy()
+                paciente_atualizado["Horário de Chegada"] = str(
+                    row["Horário de Chegada"]
+                ).upper()
+                paciente_atualizado["Nome"] = str(row["Nome"]).upper()
+                paciente_atualizado["CPF"] = str(row["CPF"]).upper()
+                paciente_atualizado["Data de Nascimento"] = str(
+                    row["Data de Nascimento"]
+                ).upper()
+                paciente_atualizado["Atendimento"] = str(
+                    row["Atendimento"]
+                ).upper()
+                pacientes_atualizados.append(paciente_atualizado)
+
+            # Mescla apenas as linhas alteradas com a planilha mais recente —
+            # nunca envia a lista inteira "por cima", então nada é apagado.
+            if salvar_varios_com_mesclagem(pacientes_atualizados):
                 st.success("ALTERAÇÕES SALVAS NA PLANILHA COM SUCESSO!")
                 st.rerun()
 
@@ -467,14 +542,17 @@ with aba_equipe:
                                 nome_prof_salvar = completo.upper()
                                 break
 
-                    paciente_atual["Profissional"] = nome_prof_salvar
-                    paciente_atual["Observações"] = (
+                    paciente_atualizado = paciente_atual.copy()
+                    paciente_atualizado["Profissional"] = nome_prof_salvar
+                    paciente_atualizado["Observações"] = (
                         texto_observacoes.strip().upper()
                     )
-                    paciente_atual["Status"] = status_atendimento.upper()
+                    paciente_atualizado["Status"] = status_atendimento.upper()
                     st.session_state.modo_edicao_concluido = False
 
-                    if salvar_todos_dados(st.session_state.pacientes):
+                    # Mescla este único registro com a versão mais atual da
+                    # planilha — os demais pacientes nunca são tocados/apagados.
+                    if salvar_com_mesclagem(paciente_atualizado):
                         st.success(
                             "INFORMAÇÕES ATUALIZADAS E SALVAS NA PLANILHA!"
                         )
